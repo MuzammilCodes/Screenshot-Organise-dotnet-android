@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ScreenshotOrganiser</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <ApplicationId>com.muzammilcodes.screenshotorganiser</ApplicationId>
+    <ApplicationDisplayVersion>2.0.0</ApplicationDisplayVersion>
+    <!-- Must be higher than the last published MAUI versionCode (currently 3) -->
+    <ApplicationVersion>4</ApplicationVersion>
+    <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
+    <AndroidPackageFormat>aab</AndroidPackageFormat>
+
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+    <AndroidLinkTool>r8</AndroidLinkTool>
+    <AndroidLinkResources>true</AndroidLinkResources>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Secrets come from environment variables, never commit them -->
+    <AndroidKeyStore Condition="'$(ANDROID_KEYSTORE_PATH)' != ''">true</AndroidKeyStore>
+    <AndroidSigningKeyStore>$(ANDROID_KEYSTORE_PATH)</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias>$(ANDROID_KEYSTORE_ALIAS)</AndroidSigningKeyAlias>
+    <AndroidSigningStorePass>$(ANDROID_KEYSTORE_PASSWORD)</AndroidSigningStorePass>
+    <AndroidSigningKeyPass>$(ANDROID_KEY_PASSWORD)</AndroidSigningKeyPass>
+  </PropertyGroup>
+
+</Project>
