@@ -96,8 +96,7 @@
                 <ImageView
                     android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:src="@drawable/ic_overlay"
-                    android:tint="@color/text_primary" />
+                    android:src="@drawable/ic_overlay" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -151,7 +150,7 @@
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:src="@drawable/ic_folder"
-                    android:tint="@color/text_primary" />
+                    android:tint="@color/folder_icon" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -205,7 +204,7 @@
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:src="@drawable/ic_folder"
-                    android:tint="@color/text_primary" />
+                    android:tint="@color/folder_icon" />
 
                 <LinearLayout
                     android:layout_width="0dp"

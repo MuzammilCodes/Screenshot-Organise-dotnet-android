@@ -6,6 +6,8 @@
     <color name="text_secondary">#64748B</color>
     <color name="divider">#E2E8F0</color>
     <color name="accent">#1976D2</color>
+    <color name="folder_icon">#3682B8</color>
+    <color name="overlay_icon">#3682B8</color>
     <color name="success">#16A34A</color>
 
     <color name="overlay_card">#FAFAFA</color>

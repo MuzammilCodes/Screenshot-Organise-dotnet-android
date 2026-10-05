@@ -14,31 +14,7 @@ public static class FolderPickerViewFactory
 
     private const string AccentColor = "#1976D2";
 
-    private static bool IsDarkMode(Context context)
-    {
-        var uiMode = context.Resources?.Configuration?.UiMode & Android.Content.Res.UiMode.NightMask;
-        return uiMode == Android.Content.Res.UiMode.NightYes;
-    }
-
-    // Material You dynamic accent on Android 12+, app accent otherwise
-    private static Color ThemeAccent(Context context)
-    {
-        if (OperatingSystem.IsAndroidVersionAtLeast(31))
-        {
-            try
-            {
-                var resId = IsDarkMode(context)
-                    ? Android.Resource.Color.SystemAccent1200
-                    : Android.Resource.Color.SystemAccent1600;
-                return new Color(context.GetColor(resId));
-            }
-            catch
-            {
-                // fall through to static accent
-            }
-        }
-        return Color.ParseColor(AccentColor);
-    }
+    private static Color ThemeAccent(Context context) => new(context.GetColor(Resource.Color.folder_icon));
 
     private static Color CardColor(Context context) => new(context.GetColor(Resource.Color.overlay_card));
     private static Color TitleColor(Context context) => new(context.GetColor(Resource.Color.overlay_title));
