@@ -35,6 +35,8 @@ public sealed class ScreenshotMonitor
             _timer.Elapsed += OnTick;
             _timer.Start();
         }
+
+        FolderPreferenceStore.SaveMonitoringEnabled(Application.Context, true);
     }
 
     public void Stop(bool stopService = true)
@@ -46,6 +48,8 @@ public sealed class ScreenshotMonitor
             _timer = null;
             _processedFiles.Clear();
         }
+
+        FolderPreferenceStore.SaveMonitoringEnabled(Application.Context, false);
 
         if (stopService)
             OverlayService.Stop(Application.Context);

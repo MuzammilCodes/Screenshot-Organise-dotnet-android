@@ -121,6 +121,12 @@ public class MainActivity : Activity
 
         _monitorSwitch.Enabled = CanToggleMonitoring;
         _monitorSwitch.Alpha = CanToggleMonitoring ? 1f : 0.5f;
+
+        // Restore the persisted toggle state (e.g. after app data was cleared or the process restarted)
+        if (CanToggleMonitoring && !ScreenshotMonitor.Instance.IsMonitoring &&
+            FolderPreferenceStore.GetMonitoringEnabled(this))
+            ScreenshotMonitor.Instance.Start();
+
         SetSwitch(ScreenshotMonitor.Instance.IsMonitoring);
     }
 
