@@ -23,7 +23,6 @@ public class OverlayService : Service
     private IWindowManager? _windowManager;
     private View? _overlayView;
     private View? _pickerView;
-    private PowerManager.WakeLock? _wakeLock;
     private bool _isRunning;
 
     public static OverlayService? Instance { get; private set; }
@@ -66,10 +65,6 @@ public class OverlayService : Service
 
             _windowManager = GetSystemService(WindowService)?.JavaCast<IWindowManager>();
 
-            var powerManager = GetSystemService(PowerService) as PowerManager;
-            _wakeLock = powerManager?.NewWakeLock(WakeLockFlags.Partial, "ScreenshotOrganizer::ServiceWakeLock");
-            _wakeLock?.Acquire();
-
             CreateNotificationChannel();
             StartForegroundCompat();
         }
@@ -92,6 +87,11 @@ public class OverlayService : Service
 
             if (_isRunning)
                 StartForegroundCompat();
+
+            // After the process is killed and the service is restarted by the system, the app UI never runs,
+            // so the monitor must be resumed from here.
+            if (!ScreenshotMonitor.Instance.IsMonitoring && FolderPreferenceStore.GetMonitoringEnabled(this))
+                ScreenshotMonitor.Instance.Start(startService: false);
         }
         catch (Exception ex)
         {
@@ -110,9 +110,6 @@ public class OverlayService : Service
             _isRunning = false;
             HideDialog();
             HidePicker();
-
-            _wakeLock?.Release();
-            _wakeLock = null;
 
             Instance = null;
             StopForeground(StopForegroundFlags.Remove);
