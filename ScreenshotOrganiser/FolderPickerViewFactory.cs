@@ -370,7 +370,7 @@ public static class FolderPickerViewFactory
         var screenWidthDp = screenWidth / density;
 
         return screenWidthDp >= 600
-            ? (int)(screenWidth * 0.5f)
+            ? (int)(screenWidth * 0.4f)
             : (int)(screenWidth * 0.88f);
     }
 
