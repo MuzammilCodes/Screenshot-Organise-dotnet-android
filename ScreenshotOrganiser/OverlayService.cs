@@ -129,6 +129,8 @@ public class OverlayService : Service
     {
         if (_windowManager == null || !_isRunning) return;
 
+        var recentFolders = FolderPreferenceStore.GetRecentFolders(this, IOPath.GetDirectoryName(screenshotPath));
+
         UiThread.Post(() =>
         {
             try
@@ -137,6 +139,12 @@ public class OverlayService : Service
 
                 _overlayView = FolderPickerViewFactory.BuildScreenshotDetectedCard(
                     this,
+                    recentFolders,
+                    onQuickMove: folder =>
+                    {
+                        HideDialog();
+                        _ = MoveToFolderAsync(screenshotPath, folder);
+                    },
                     onSelectFolder: () =>
                     {
                         HideDialog();
@@ -315,6 +323,7 @@ public class OverlayService : Service
                 File.Delete(screenshotPath);
             });
 
+            FolderPreferenceStore.AddRecentFolder(this, destinationFolder);
             ShowSnackbar("Moved");
         }
         catch (Exception ex)

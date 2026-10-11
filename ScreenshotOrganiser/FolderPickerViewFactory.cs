@@ -251,7 +251,12 @@ public static class FolderPickerViewFactory
     // ------------------------------------------------------------------
     // "Screenshot detected" card
     // ------------------------------------------------------------------
-    public static View BuildScreenshotDetectedCard(Context context, Action onSelectFolder, Action onCancel)
+    public static View BuildScreenshotDetectedCard(
+        Context context,
+        IReadOnlyList<string> recentFolders,
+        Action<string> onQuickMove,
+        Action onSelectFolder,
+        Action onCancel)
     {
         var density = context.Resources?.DisplayMetrics?.Density ?? 1f;
         int Dp(int dp) => (int)(dp * density);
@@ -269,6 +274,9 @@ public static class FolderPickerViewFactory
         messageLabel.Gravity = GravityFlags.CenterHorizontal;
         card.AddView(messageLabel);
 
+        if (recentFolders.Count > 0)
+            AddRecentFolderTiles(context, card, recentFolders, onQuickMove, Dp);
+
         var buttonRow = CreateButtonRow(context, Dp);
         var cancelBtn = CreateFlatButton(context, "Cancel", SecondaryColor(context));
         var selectBtn = CreatePillButton(context, "Select folder", Dp, withFolderIcon: true);
@@ -282,6 +290,77 @@ public static class FolderPickerViewFactory
         card.AddView(buttonRow);
 
         return card;
+    }
+
+    private const int RecentTilesPerRow = 3;
+
+    private static void AddRecentFolderTiles(
+        Context context,
+        LinearLayout card,
+        IReadOnlyList<string> folders,
+        Action<string> onQuickMove,
+        Func<int, int> dp)
+    {
+        var header = new TextView(context) { Text = "Recent folders" };
+        header.SetTextColor(SecondaryColor(context));
+        header.SetTextSize(Android.Util.ComplexUnitType.Sp, 12);
+        header.SetPadding(dp(4), dp(4), 0, dp(6));
+        card.AddView(header);
+
+        for (int start = 0; start < folders.Count; start += RecentTilesPerRow)
+        {
+            var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+
+            for (int i = start; i < start + RecentTilesPerRow; i++)
+            {
+                var slotParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f)
+                {
+                    LeftMargin = dp(4), RightMargin = dp(4), BottomMargin = dp(8)
+                };
+
+                if (i < folders.Count)
+                    row.AddView(CreateRecentFolderTile(context, folders[i], onQuickMove, dp), slotParams);
+                else
+                    // Zero height: a bare wrap_content View would expand to fill the window
+                    row.AddView(new View(context), new LinearLayout.LayoutParams(0, 0, 1f)
+                    {
+                        LeftMargin = dp(4), RightMargin = dp(4)
+                    });
+            }
+
+            card.AddView(row);
+        }
+    }
+
+    private static LinearLayout CreateRecentFolderTile(
+        Context context, string folderPath, Action<string> onQuickMove, Func<int, int> dp)
+    {
+        var tile = new LinearLayout(context) { Orientation = Orientation.Vertical, Clickable = true };
+        tile.SetGravity(GravityFlags.Center);
+        tile.SetPadding(dp(14), dp(8), dp(14), dp(8));
+
+        var accent = ThemeAccent(context);
+        var bg = new Android.Graphics.Drawables.GradientDrawable();
+        bg.SetColor(Color.Transparent);
+        bg.SetCornerRadius(dp(14));
+        bg.SetStroke(dp(2), accent, dp(6), dp(4));
+        tile.Background = bg;
+
+        var trimmedPath = folderPath.TrimEnd('/', '\\');
+        var name = string.Equals(trimmedPath, StorageRoot, StringComparison.OrdinalIgnoreCase)
+            ? "Internal storage"
+            : IOPath.GetFileName(trimmedPath);
+
+        var label = new TextView(context) { Text = name };
+        label.SetTextColor(TitleColor(context));
+        label.SetTextSize(Android.Util.ComplexUnitType.Sp, 14);
+        label.Gravity = GravityFlags.Center;
+        label.SetMaxLines(2);
+        label.Ellipsize = TextUtils.TruncateAt.End;
+        tile.AddView(label);
+
+        tile.Click += (_, _) => onQuickMove(folderPath);
+        return tile;
     }
 
     public static int GetPreferredWidth(Context context)
