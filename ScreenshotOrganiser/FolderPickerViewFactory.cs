@@ -60,7 +60,7 @@ public static class FolderPickerViewFactory
         string[] subFolders;
         try
         {
-            subFolders = Directory.GetDirectories(currentPath)
+            subFolders = StorageAccess.ListDirectories(context, currentPath)
                 .Where(d => !IOPath.GetFileName(d).StartsWith("."))
                 .OrderBy(d => IOPath.GetFileName(d), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -70,7 +70,8 @@ public static class FolderPickerViewFactory
             subFolders = Array.Empty<string>();
         }
 
-        bool canGoUp = !string.Equals(currentPath.TrimEnd('/'), StorageRoot, StringComparison.OrdinalIgnoreCase);
+        var destinationRoot = StorageAccess.GetRootPath(context, FolderRole.Destination);
+        bool canGoUp = !string.Equals(currentPath.TrimEnd('/'), destinationRoot, StringComparison.OrdinalIgnoreCase);
 
         var items = new List<string>();
         if (canGoUp) items.Add("..");
@@ -87,8 +88,7 @@ public static class FolderPickerViewFactory
             {
                 if (canGoUp && e.Position == 0)
                 {
-                    var parent = IOPath.GetDirectoryName(currentPath.TrimEnd('/')) ?? StorageRoot;
-                    onNavigate(parent);
+                    onNavigate(IOPath.GetDirectoryName(currentPath.TrimEnd('/')) ?? currentPath);
                 }
                 else
                 {
@@ -163,7 +163,7 @@ public static class FolderPickerViewFactory
             try
             {
                 var newPath = IOPath.Combine(parentPath, name);
-                Directory.CreateDirectory(newPath);
+                StorageAccess.CreateDirectory(context, newPath);
                 onCreated(newPath);
             }
             catch (Exception ex)

@@ -72,7 +72,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="1. Grant permissions\n2. Select folder where your screenshots are saved\n3. Enable monitoring\n4. Take screenshots\n5. Organize instantly"
+                    android:text="1. Grant permissions\n2. Select folder where your screenshots are saved\n3. Select folder to move screenshots into\n4. Enable monitoring\n5. Take screenshots\n6. Organize instantly"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -131,7 +131,7 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <!-- All files access -->
+            <!-- Media permission -->
             <LinearLayout
                 android:id="@+id/card_files"
                 android:layout_width="match_parent"
@@ -162,7 +162,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="All Files Access"
+                        android:text="Photos Access"
                         android:textColor="@color/text_primary"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -171,7 +171,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="Required to move screenshots"
+                        android:text="Required to detect new screenshots"
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -233,13 +233,75 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="Choose the folder where your phone saves screenshots."
+                        android:text="Choose the folder where your phone saves screenshots, then tap Use this folder."
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp" />
                 </LinearLayout>
 
                 <ImageView
                     android:id="@+id/folder_check"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="15dp"
+                    android:src="@drawable/ic_check"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Move-to folder -->
+            <LinearLayout
+                android:id="@+id/card_destination"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="15dp"
+                android:background="@drawable/card_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:elevation="1dp"
+                android:foreground="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="16dp">
+
+                <ImageView
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@drawable/ic_folder"
+                    android:tint="@color/folder_icon" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Select your move-to folder"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Ex: Internal Storage/Pictures"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Screenshots can be moved into this folder or new folders inside it."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/destination_check"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:layout_marginEnd="15dp"

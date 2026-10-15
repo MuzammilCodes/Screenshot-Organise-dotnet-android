@@ -5,7 +5,6 @@ using Android.OS;
 using Android.Provider;
 using Android.Views;
 using Android.Widget;
-using AndroidEnvironment = Android.OS.Environment;
 using AndroidUri = Android.Net.Uri;
 using IOPath = System.IO.Path;
 
@@ -17,27 +16,42 @@ public class MainActivity : Activity
 {
     private const int InitialDelayMs = 600;
     private const int AfterPermissionGrantedDelayMs = 800;
-    private const int LegacyStorageRequestCode = 100;
+    private const int MediaPermissionRequestCode = 100;
+    private const int SourceTreeRequestCode = 101;
+    private const int DestinationTreeRequestCode = 102;
+    private const string SourceInitialUri =
+        "content://com.android.externalstorage.documents/document/primary%3APictures%2FScreenshots";
+    private const string DestinationInitialUri =
+        "content://com.android.externalstorage.documents/document/primary%3APictures";
 
     private ImageView _overlayCheck = null!;
     private ImageView _filesCheck = null!;
     private ImageView _folderCheck = null!;
+    private ImageView _destinationCheck = null!;
     private Switch _monitorSwitch = null!;
 
     private bool _hasOverlayPermission;
-    private bool _hasFilePermission;
+    private bool _hasMediaPermission;
     private bool _hasDefaultFolder;
+    private bool _hasDestination;
 
     private bool _permissionsRequested;
     private bool _overlayRequested;
-    private bool _fileRequested;
+    private bool _mediaRequested;
+    private readonly HashSet<FolderRole> _requestedRoles = new();
 
     private bool _dialogOpen;
     private bool _suppressSwitchEvent;
-    private Dialog? _pickerDialog;
     private Dialog? _confirmDialog;
 
-    private bool CanToggleMonitoring => _hasOverlayPermission && _hasFilePermission && _hasDefaultFolder;
+    private bool CanToggleMonitoring =>
+        _hasOverlayPermission && _hasMediaPermission && _hasDefaultFolder && _hasDestination;
+
+    private static string MediaPermission => OperatingSystem.IsAndroidVersionAtLeast(33)
+        ? Android.Manifest.Permission.ReadMediaImages
+        : Android.Manifest.Permission.ReadExternalStorage;
+
+    private bool HasMediaPermission() => CheckSelfPermission(MediaPermission) == Permission.Granted;
 
     // ------------------------------------------------------------------
     // Lifecycle
@@ -50,17 +64,20 @@ public class MainActivity : Activity
         _overlayCheck = FindViewById<ImageView>(Resource.Id.overlay_check)!;
         _filesCheck = FindViewById<ImageView>(Resource.Id.files_check)!;
         _folderCheck = FindViewById<ImageView>(Resource.Id.folder_check)!;
+        _destinationCheck = FindViewById<ImageView>(Resource.Id.destination_check)!;
         _monitorSwitch = FindViewById<Switch>(Resource.Id.monitor_switch)!;
 
         FindViewById(Resource.Id.card_overlay)!.Click += (_, _) =>
         {
             if (!_hasOverlayPermission) OpenOverlayPermissionSettings();
         };
-        FindViewById(Resource.Id.card_files)!.Click += async (_, _) =>
+        FindViewById(Resource.Id.card_files)!.Click += (_, _) =>
         {
-            if (!_hasFilePermission) await OpenFilePermissionSettingsAsync();
+            if (!_hasMediaPermission) RequestMediaPermission();
         };
-        FindViewById(Resource.Id.card_folder)!.Click += async (_, _) => await OnFolderCardTappedAsync();
+        FindViewById(Resource.Id.card_folder)!.Click += async (_, _) => await OnFolderCardTappedAsync(FolderRole.Source);
+        FindViewById(Resource.Id.card_destination)!.Click += async (_, _) =>
+            await OnFolderCardTappedAsync(FolderRole.Destination);
 
         _monitorSwitch.CheckedChange += OnMonitorToggled;
     }
@@ -91,7 +108,6 @@ public class MainActivity : Activity
 
     protected override void OnDestroy()
     {
-        _pickerDialog?.Dismiss();
         _confirmDialog?.Dismiss();
         base.OnDestroy();
     }
@@ -102,13 +118,9 @@ public class MainActivity : Activity
     private void RefreshState()
     {
         _hasOverlayPermission = Settings.CanDrawOverlays(this);
-
-        _hasFilePermission = OperatingSystem.IsAndroidVersionAtLeast(30)
-            ? AndroidEnvironment.IsExternalStorageManager
-            : CheckSelfPermission(Android.Manifest.Permission.ReadExternalStorage) == Permission.Granted &&
-              CheckSelfPermission(Android.Manifest.Permission.WriteExternalStorage) == Permission.Granted;
-
-        _hasDefaultFolder = FolderPreferenceStore.GetDefaultFolder(this) != null;
+        _hasMediaPermission = HasMediaPermission();
+        _hasDefaultFolder = StorageAccess.GetRootPath(this, FolderRole.Source) != null;
+        _hasDestination = StorageAccess.GetRootPath(this, FolderRole.Destination) != null;
 
         UpdateUi();
     }
@@ -116,8 +128,9 @@ public class MainActivity : Activity
     private void UpdateUi()
     {
         _overlayCheck.Visibility = _hasOverlayPermission ? ViewStates.Visible : ViewStates.Gone;
-        _filesCheck.Visibility = _hasFilePermission ? ViewStates.Visible : ViewStates.Gone;
+        _filesCheck.Visibility = _hasMediaPermission ? ViewStates.Visible : ViewStates.Gone;
         _folderCheck.Visibility = _hasDefaultFolder ? ViewStates.Visible : ViewStates.Gone;
+        _destinationCheck.Visibility = _hasDestination ? ViewStates.Visible : ViewStates.Gone;
 
         _monitorSwitch.Enabled = CanToggleMonitoring;
         _monitorSwitch.Alpha = CanToggleMonitoring ? 1f : 0.5f;
@@ -151,31 +164,37 @@ public class MainActivity : Activity
             return;
         }
 
-        if (!_hasFilePermission && !_fileRequested)
-        {
-            await OpenFilePermissionSettingsAsync();
-            return;
-        }
-
-        if (_hasOverlayPermission && _hasFilePermission && !_hasDefaultFolder)
-            await EnsureDefaultFolderAsync();
+        await ContinueSetupAsync(0);
     }
 
-    private async Task CheckPermissionsAndContinueFlowAsync()
+    private Task CheckPermissionsAndContinueFlowAsync() => ContinueSetupAsync(AfterPermissionGrantedDelayMs);
+
+    // Each step is offered once automatically; the cards let the user retry
+    private async Task ContinueSetupAsync(int delayMs)
     {
         RefreshState();
+        if (!_hasOverlayPermission) return;
 
-        if (_overlayRequested && _hasOverlayPermission && !_fileRequested && !_hasFilePermission)
+        if (!_hasMediaPermission)
         {
-            await Task.Delay(AfterPermissionGrantedDelayMs);
-            await OpenFilePermissionSettingsAsync();
-            return;
+            if (_mediaRequested) return;
+
+            await Task.Delay(delayMs);
+            RequestMediaPermission();
         }
-
-        if (_hasOverlayPermission && _hasFilePermission && !_hasDefaultFolder)
+        else if (!_hasDefaultFolder)
         {
-            await Task.Delay(AfterPermissionGrantedDelayMs);
-            await EnsureDefaultFolderAsync();
+            if (_requestedRoles.Contains(FolderRole.Source)) return;
+
+            await Task.Delay(delayMs);
+            await OnFolderCardTappedAsync(FolderRole.Source);
+        }
+        else if (!_hasDestination)
+        {
+            if (_requestedRoles.Contains(FolderRole.Destination)) return;
+
+            await Task.Delay(delayMs);
+            await OnFolderCardTappedAsync(FolderRole.Destination);
         }
     }
 
@@ -188,181 +207,96 @@ public class MainActivity : Activity
         StartActivity(intent);
     }
 
-    private async Task OpenFilePermissionSettingsAsync()
+    private void RequestMediaPermission()
     {
-        if (OperatingSystem.IsAndroidVersionAtLeast(30))
-        {
-            if (AndroidEnvironment.IsExternalStorageManager)
-            {
-                _fileRequested = true;
-                _hasFilePermission = true;
-                UpdateUi();
-                return;
-            }
-
-            bool grant = await ShowConfirmationAsync(
-                "All Files Access",
-                "This permission allows Screenshot Organiser to detect and move screenshots between folders you choose.\n\n🔒 Everything stays on your device, giving you complete control over your files.",
-                "Grant Access");
-
-            _fileRequested = true;
-            if (!grant) return;
-
-            var intent = new Intent(
-                Settings.ActionManageAppAllFilesAccessPermission, AndroidUri.Parse($"package:{PackageName}"));
-            intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.NoHistory | ActivityFlags.ExcludeFromRecents);
-            StartActivity(intent);
-        }
-        else
-        {
-            _fileRequested = true;
-            RequestPermissions(new[]
-            {
-                Android.Manifest.Permission.ReadExternalStorage,
-                Android.Manifest.Permission.WriteExternalStorage
-            }, LegacyStorageRequestCode);
-            // Result is picked up by OnResume -> CheckPermissionsAndContinueFlowAsync
-        }
+        _mediaRequested = true;
+        RequestPermissions(new[] { MediaPermission }, MediaPermissionRequestCode);
+        // Result is picked up by OnResume -> CheckPermissionsAndContinueFlowAsync
     }
 
     // ------------------------------------------------------------------
-    // Default folder
+    // Folder grants: default screenshot folder (Source) and move-to folder (Destination)
     // ------------------------------------------------------------------
-    private async Task OnFolderCardTappedAsync()
+    private async Task OnFolderCardTappedAsync(FolderRole role)
     {
         if (_dialogOpen) return;
+        _requestedRoles.Add(role);
 
-        if (!_hasDefaultFolder)
-        {
-            await EnsureDefaultFolderAsync();
-            return;
-        }
-
-        var current = FolderPreferenceStore.GetDefaultFolder(this);
-        var folderName = string.IsNullOrEmpty(current)
-            ? "Not set"
-            : IOPath.GetFileName(current.TrimEnd('/', '\\'));
+        var current = StorageAccess.GetRootPath(this, role);
+        var (title, message) = role == FolderRole.Source
+            ? ("Default Screenshot Folder",
+                "Open the folder where your phone saves screenshots, then tap \"Use this folder\" and \"Allow\".\n\nYou only need to do this once.")
+            : ("Move-to Folder",
+                "Choose the folder you want to move screenshots into, such as Pictures. You can also create new folders inside it.\n\nTap \"Use this folder\" and \"Allow\". You only need to do this once.");
 
         _dialogOpen = true;
         try
         {
-            bool change = await ShowConfirmationAsync(
-                "Default Screenshot Folder",
-                $"Current folder: {folderName}\n\nDo you want to choose a different folder?",
-                "Change Folder");
+            bool proceed = current == null
+                ? await ShowConfirmationAsync(title, message, "Choose Folder")
+                : await ShowConfirmationAsync(
+                    title,
+                    $"Current folder: {IOPath.GetFileName(current)}\n\nDo you want to choose a different folder?",
+                    "Change Folder");
 
-            if (change)
-                ShowFolderPicker("Choose default folder", "Select", FolderPickerViewFactory.StorageRoot);
-            else
-                _dialogOpen = false;
+            if (proceed) LaunchTreePicker(role);
         }
-        catch
+        finally
         {
             _dialogOpen = false;
-            throw;
         }
     }
 
-    private async Task EnsureDefaultFolderAsync()
+    private void LaunchTreePicker(FolderRole role)
     {
-        if (_hasDefaultFolder || _dialogOpen) return;
+        var initialUri = role == FolderRole.Source ? SourceInitialUri : DestinationInitialUri;
 
-        _dialogOpen = true;
-        try
-        {
-            bool choose = await ShowConfirmationAsync(
-                "Default Screenshot Folder",
-                "Select where screenshots are stored",
-                "Select Folder");
-
-            if (choose)
-                ShowFolderPicker("Choose default folder", "Select", FolderPickerViewFactory.StorageRoot);
-            else
-                _dialogOpen = false;
-        }
-        catch
-        {
-            _dialogOpen = false;
-            throw;
-        }
+        var intent = new Intent(Intent.ActionOpenDocumentTree);
+        intent.PutExtra(DocumentsContract.ExtraInitialUri, AndroidUri.Parse(initialUri));
+        intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission |
+                        ActivityFlags.GrantPersistableUriPermission | ActivityFlags.GrantPrefixUriPermission);
+        StartActivityForResult(intent, role == FolderRole.Source ? SourceTreeRequestCode : DestinationTreeRequestCode);
     }
 
-    private void OnDefaultFolderChosen(string folderPath)
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
-        FolderPreferenceStore.SaveDefaultFolder(this, folderPath);
+        base.OnActivityResult(requestCode, resultCode, data);
 
-        Toast.MakeText(this, $"Default screenshot folder set: {IOPath.GetFileName(folderPath)}", ToastLength.Long)?.Show();
+        FolderRole role;
+        if (requestCode == SourceTreeRequestCode) role = FolderRole.Source;
+        else if (requestCode == DestinationTreeRequestCode) role = FolderRole.Destination;
+        else return;
 
-        _dialogOpen = false;
-        _hasDefaultFolder = true;
-        UpdateUi();
-    }
+        if (resultCode != Result.Ok || data?.Data is not { } treeUri) return;
 
-    // ------------------------------------------------------------------
-    // Folder picker dialogs (hosted in this activity)
-    // ------------------------------------------------------------------
-    private void ShowFolderPicker(string title, string confirmText, string currentPath)
-    {
-        try
+        if (!StorageAccess.IsSupportedTree(treeUri))
         {
-            var card = FolderPickerViewFactory.BuildFolderPickerCard(
-                this, title, confirmText, currentPath,
-                onNavigate: path => ShowFolderPicker(title, confirmText, path),
-                onConfirm: path =>
-                {
-                    HidePickerDialog();
-                    OnDefaultFolderChosen(path);
-                },
-                onNewFolder: path => ShowNewFolder(title, confirmText, path),
-                onCancel: () =>
-                {
-                    HidePickerDialog();
-                    _dialogOpen = false;
-                });
-
-            ShowCardInPickerDialog(card);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error showing folder picker: {ex.Message}");
-            HidePickerDialog();
-            _dialogOpen = false;
-        }
-    }
-
-    private void ShowNewFolder(string title, string confirmText, string parentPath)
-    {
-        var card = FolderPickerViewFactory.BuildNewFolderCard(
-            this, parentPath,
-            onCreated: newPath => ShowFolderPicker(title, confirmText, newPath),
-            onBack: () => ShowFolderPicker(title, confirmText, parentPath),
-            showMessage: msg => Toast.MakeText(this, msg, ToastLength.Long)?.Show());
-
-        ShowCardInPickerDialog(card);
-    }
-
-    private void ShowCardInPickerDialog(View card)
-    {
-        // Swap content instead of dismiss/show to avoid flicker while navigating
-        if (_pickerDialog is { IsShowing: true })
-        {
-            _pickerDialog.SetContentView(card);
-            _pickerDialog.Window?.SetLayout(
-                FolderPickerViewFactory.GetPreferredWidth(this), ViewGroup.LayoutParams.WrapContent);
+            Toast.MakeText(this, "Please choose a specific folder on internal storage", ToastLength.Long)?.Show();
+            _requestedRoles.Remove(role);
             return;
         }
 
-        _pickerDialog = CreateCardDialog(card);
-        _pickerDialog.Show();
+        var grantFlags = ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission;
+        ContentResolver?.TakePersistableUriPermission(treeUri, grantFlags);
+
+        var previous = FolderPreferenceStore.GetTreeUri(this, role);
+        FolderPreferenceStore.SaveTreeUri(this, role, treeUri);
+
+        // Android caps the number of persisted grants, so drop the replaced one
+        if (previous != null && !IsGrantInUse(previous))
+            ContentResolver?.ReleasePersistableUriPermission(previous, grantFlags);
+
+        var name = IOPath.GetFileName(StorageAccess.GetRootPath(this, role));
+        Toast.MakeText(this, $"Folder set: {name}", ToastLength.Long)?.Show();
     }
 
-    private void HidePickerDialog()
-    {
-        try { _pickerDialog?.Dismiss(); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error dismissing picker: {ex.Message}"); }
-        finally { _pickerDialog = null; }
-    }
+    private bool IsGrantInUse(AndroidUri uri) =>
+        uri.Equals(FolderPreferenceStore.GetTreeUri(this, FolderRole.Source)) ||
+        uri.Equals(FolderPreferenceStore.GetTreeUri(this, FolderRole.Destination));
 
+    // ------------------------------------------------------------------
+    // Dialogs
+    // ------------------------------------------------------------------
     private Dialog CreateCardDialog(View card)
     {
         var dialog = new Dialog(this);

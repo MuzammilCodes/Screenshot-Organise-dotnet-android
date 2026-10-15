@@ -16,7 +16,6 @@ public class OverlayService : Service
     private const int NotificationId = 1001;
     private const string ChannelId = "screenshot_service";
     private const string ActionStop = "STOP_SERVICE";
-    private const string StorageRoot = FolderPickerViewFactory.StorageRoot;
     private const float SnackbarTopOffsetPercent = 0.025f;
     private const int SnackbarDurationMs = 2500;
 
@@ -148,7 +147,12 @@ public class OverlayService : Service
                     onSelectFolder: () =>
                     {
                         HideDialog();
-                        ShowFolderPickerOverlay(screenshotPath, StorageRoot);
+
+                        var root = StorageAccess.GetRootPath(this, FolderRole.Destination);
+                        if (root == null)
+                            ShowToast("Choose a move-to folder in the app first");
+                        else
+                            ShowFolderPickerOverlay(screenshotPath, root);
                     },
                     onCancel: () =>
                     {
@@ -295,32 +299,10 @@ public class OverlayService : Service
         {
             await Task.Delay(500);
 
-            if (!File.Exists(screenshotPath))
-            {
-                ShowToast("Screenshot file not found");
-                return;
-            }
-
             await Task.Run(() =>
             {
-                Directory.CreateDirectory(destinationFolder);
-
-                var fileName = IOPath.GetFileName(screenshotPath);
-                var destinationPath = IOPath.Combine(destinationFolder, fileName);
-
-                int counter = 1;
-                while (File.Exists(destinationPath))
-                {
-                    var nameWithoutExt = IOPath.GetFileNameWithoutExtension(fileName);
-                    var extension = IOPath.GetExtension(fileName);
-                    destinationPath = IOPath.Combine(destinationFolder, $"{nameWithoutExt}_{counter}{extension}");
-                    counter++;
-                }
-
                 ScreenshotMonitor.MarkFileAsMoved(screenshotPath);
-
-                File.Copy(screenshotPath, destinationPath, overwrite: true);
-                File.Delete(screenshotPath);
+                StorageAccess.MoveFile(this, screenshotPath, destinationFolder);
             });
 
             FolderPreferenceStore.AddRecentFolder(this, destinationFolder);

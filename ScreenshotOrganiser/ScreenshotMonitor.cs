@@ -17,7 +17,7 @@ public sealed class ScreenshotMonitor
 
     private const string FallbackFolder = "/storage/emulated/0/Pictures/Screenshots";
     private const int DebounceMs = 700;
-    private static readonly TimeSpan DirectoryChangeMargin = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ScanMargin = TimeSpan.FromSeconds(2);
 
     // In-memory is enough: _lastCheckTime resets on every resume, so old files are never re-detected
     private static readonly ConcurrentDictionary<string, DateTime> RecentlyMoved = new();
@@ -182,7 +182,7 @@ public sealed class ScreenshotMonitor
                     OverlayService.Start(Application.Context);
 
                 var checkStart = DateTime.Now;
-                var folder = FolderPreferenceStore.GetDefaultFolder(Application.Context) ?? FallbackFolder;
+                var folder = StorageAccess.GetRootPath(Application.Context, FolderRole.Source) ?? FallbackFolder;
 
                 foreach (var screenshot in FindNewScreenshots(folder, _lastCheckTime))
                 {
@@ -191,7 +191,7 @@ public sealed class ScreenshotMonitor
                         if (!_processedFiles.Add(screenshot)) continue;
                     }
 
-                    if (IsRecentlyMoved(screenshot) || !File.Exists(screenshot)) continue;
+                    if (IsRecentlyMoved(screenshot)) continue;
 
                     OverlayService.Instance?.ShowScreenshotDialog(screenshot);
                 }
@@ -208,28 +208,34 @@ public sealed class ScreenshotMonitor
     private static List<string> FindNewScreenshots(string folder, DateTime since)
     {
         var result = new List<string>();
-        var directory = new DirectoryInfo(folder);
-        if (!directory.Exists) return result;
+        var resolver = Application.Context.ContentResolver;
+        if (resolver == null) return result;
 
-        // The folder's mtime changes whenever a file is added, so an unchanged folder needs no listing
-        if (directory.LastWriteTime < since - DirectoryChangeMargin) return result;
+        // MediaStore dates are in whole seconds
+        var sinceSeconds = new DateTimeOffset(since - ScanMargin).ToUnixTimeSeconds().ToString();
+        var directory = folder.TrimEnd('/');
 
-        foreach (var file in directory.EnumerateFiles())
+        using var cursor = resolver.Query(
+            MediaStore.Images.Media.ExternalContentUri!,
+            new[] { MediaStore.IMediaColumns.Data! },
+            $"{MediaStore.IMediaColumns.DateAdded} >= ? OR {MediaStore.IMediaColumns.DateModified} >= ?",
+            new[] { sinceSeconds, sinceSeconds },
+            null);
+
+        while (cursor != null && cursor.MoveToNext())
         {
-            if (file.Name.StartsWith('.') || !IsImageExtension(file.Extension)) continue;
+            var path = cursor.GetString(0);
+            if (string.IsNullOrEmpty(path)) continue;
 
-            var changed = file.CreationTime > file.LastWriteTime ? file.CreationTime : file.LastWriteTime;
-            if (changed > since && IsScreenshotFile(file.FullName))
-                result.Add(file.FullName);
+            var name = Path.GetFileName(path);
+            if (name.StartsWith('.') || Path.GetDirectoryName(path) != directory) continue;
+
+            if (IsScreenshotFile(path))
+                result.Add(path);
         }
 
         return result;
     }
-
-    private static bool IsImageExtension(string extension) =>
-        extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
-        extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
-        extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsScreenshotFile(string filePath)
     {
