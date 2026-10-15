@@ -8,9 +8,9 @@
     <Nullable>enable</Nullable>
 
     <ApplicationId>com.muzammilcodes.screenshotorganiser</ApplicationId>
-    <ApplicationDisplayVersion>2.0.2</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>1.0.24</ApplicationDisplayVersion>
     <!-- Must be higher than the last published MAUI versionCode (currently 3) -->
-    <ApplicationVersion>6</ApplicationVersion>
+    <ApplicationVersion>14</ApplicationVersion>
     <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
   </PropertyGroup>
 

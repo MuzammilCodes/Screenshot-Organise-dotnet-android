@@ -208,29 +208,11 @@ public sealed class ScreenshotMonitor
     private static List<string> FindNewScreenshots(string folder, DateTime since)
     {
         var result = new List<string>();
-        var resolver = Application.Context.ContentResolver;
-        if (resolver == null) return result;
+        var sinceMs = new DateTimeOffset(since - ScanMargin).ToUnixTimeMilliseconds();
 
-        // MediaStore dates are in whole seconds
-        var sinceSeconds = new DateTimeOffset(since - ScanMargin).ToUnixTimeSeconds().ToString();
-        var directory = folder.TrimEnd('/');
-
-        using var cursor = resolver.Query(
-            MediaStore.Images.Media.ExternalContentUri!,
-            new[] { MediaStore.IMediaColumns.Data! },
-            $"{MediaStore.IMediaColumns.DateAdded} >= ? OR {MediaStore.IMediaColumns.DateModified} >= ?",
-            new[] { sinceSeconds, sinceSeconds },
-            null);
-
-        while (cursor != null && cursor.MoveToNext())
+        foreach (var (path, lastModified) in StorageAccess.ListImages(Application.Context, folder))
         {
-            var path = cursor.GetString(0);
-            if (string.IsNullOrEmpty(path)) continue;
-
-            var name = Path.GetFileName(path);
-            if (name.StartsWith('.') || Path.GetDirectoryName(path) != directory) continue;
-
-            if (IsScreenshotFile(path))
+            if (lastModified >= sinceMs && !Path.GetFileName(path).StartsWith('.') && IsScreenshotFile(path))
                 result.Add(path);
         }
 

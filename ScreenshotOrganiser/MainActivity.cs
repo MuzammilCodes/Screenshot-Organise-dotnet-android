@@ -16,7 +16,6 @@ public class MainActivity : Activity
 {
     private const int InitialDelayMs = 600;
     private const int AfterPermissionGrantedDelayMs = 800;
-    private const int MediaPermissionRequestCode = 100;
     private const int SourceTreeRequestCode = 101;
     private const int DestinationTreeRequestCode = 102;
     private const string SourceInitialUri =
@@ -25,33 +24,23 @@ public class MainActivity : Activity
         "content://com.android.externalstorage.documents/document/primary%3APictures";
 
     private ImageView _overlayCheck = null!;
-    private ImageView _filesCheck = null!;
     private ImageView _folderCheck = null!;
     private ImageView _destinationCheck = null!;
     private Switch _monitorSwitch = null!;
 
     private bool _hasOverlayPermission;
-    private bool _hasMediaPermission;
     private bool _hasDefaultFolder;
     private bool _hasDestination;
 
     private bool _permissionsRequested;
     private bool _overlayRequested;
-    private bool _mediaRequested;
     private readonly HashSet<FolderRole> _requestedRoles = new();
 
     private bool _dialogOpen;
     private bool _suppressSwitchEvent;
     private Dialog? _confirmDialog;
 
-    private bool CanToggleMonitoring =>
-        _hasOverlayPermission && _hasMediaPermission && _hasDefaultFolder && _hasDestination;
-
-    private static string MediaPermission => OperatingSystem.IsAndroidVersionAtLeast(33)
-        ? Android.Manifest.Permission.ReadMediaImages
-        : Android.Manifest.Permission.ReadExternalStorage;
-
-    private bool HasMediaPermission() => CheckSelfPermission(MediaPermission) == Permission.Granted;
+    private bool CanToggleMonitoring => _hasOverlayPermission && _hasDefaultFolder && _hasDestination;
 
     // ------------------------------------------------------------------
     // Lifecycle
@@ -62,7 +51,6 @@ public class MainActivity : Activity
         SetContentView(Resource.Layout.activity_main);
 
         _overlayCheck = FindViewById<ImageView>(Resource.Id.overlay_check)!;
-        _filesCheck = FindViewById<ImageView>(Resource.Id.files_check)!;
         _folderCheck = FindViewById<ImageView>(Resource.Id.folder_check)!;
         _destinationCheck = FindViewById<ImageView>(Resource.Id.destination_check)!;
         _monitorSwitch = FindViewById<Switch>(Resource.Id.monitor_switch)!;
@@ -70,10 +58,6 @@ public class MainActivity : Activity
         FindViewById(Resource.Id.card_overlay)!.Click += (_, _) =>
         {
             if (!_hasOverlayPermission) OpenOverlayPermissionSettings();
-        };
-        FindViewById(Resource.Id.card_files)!.Click += (_, _) =>
-        {
-            if (!_hasMediaPermission) RequestMediaPermission();
         };
         FindViewById(Resource.Id.card_folder)!.Click += async (_, _) => await OnFolderCardTappedAsync(FolderRole.Source);
         FindViewById(Resource.Id.card_destination)!.Click += async (_, _) =>
@@ -118,7 +102,6 @@ public class MainActivity : Activity
     private void RefreshState()
     {
         _hasOverlayPermission = Settings.CanDrawOverlays(this);
-        _hasMediaPermission = HasMediaPermission();
         _hasDefaultFolder = StorageAccess.GetRootPath(this, FolderRole.Source) != null;
         _hasDestination = StorageAccess.GetRootPath(this, FolderRole.Destination) != null;
 
@@ -128,7 +111,6 @@ public class MainActivity : Activity
     private void UpdateUi()
     {
         _overlayCheck.Visibility = _hasOverlayPermission ? ViewStates.Visible : ViewStates.Gone;
-        _filesCheck.Visibility = _hasMediaPermission ? ViewStates.Visible : ViewStates.Gone;
         _folderCheck.Visibility = _hasDefaultFolder ? ViewStates.Visible : ViewStates.Gone;
         _destinationCheck.Visibility = _hasDestination ? ViewStates.Visible : ViewStates.Gone;
 
@@ -175,14 +157,7 @@ public class MainActivity : Activity
         RefreshState();
         if (!_hasOverlayPermission) return;
 
-        if (!_hasMediaPermission)
-        {
-            if (_mediaRequested) return;
-
-            await Task.Delay(delayMs);
-            RequestMediaPermission();
-        }
-        else if (!_hasDefaultFolder)
+        if (!_hasDefaultFolder)
         {
             if (_requestedRoles.Contains(FolderRole.Source)) return;
 
@@ -205,13 +180,6 @@ public class MainActivity : Activity
         var intent = new Intent(Settings.ActionManageOverlayPermission, AndroidUri.Parse($"package:{PackageName}"));
         intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.NoHistory | ActivityFlags.ExcludeFromRecents);
         StartActivity(intent);
-    }
-
-    private void RequestMediaPermission()
-    {
-        _mediaRequested = true;
-        RequestPermissions(new[] { MediaPermission }, MediaPermissionRequestCode);
-        // Result is picked up by OnResume -> CheckPermissionsAndContinueFlowAsync
     }
 
     // ------------------------------------------------------------------

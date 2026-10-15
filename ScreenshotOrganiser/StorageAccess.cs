@@ -107,6 +107,34 @@ public static class StorageAccess
         return result.ToArray();
     }
 
+    /// <summary>Images directly inside <paramref name="path"/> with their last-modified time (Unix ms).</summary>
+    public static List<(string Path, long LastModified)> ListImages(Context context, string path)
+    {
+        var result = new List<(string, long)>();
+
+        var trimmed = path.TrimEnd('/');
+        var grant = FindGrant(context, trimmed);
+        if (grant == null) return result;
+
+        var childrenUri = DocumentsContract.BuildChildDocumentsUriUsingTree(grant.Tree, ToDocumentId(trimmed))!;
+        var projection = new[]
+        {
+            DocumentsContract.Document.ColumnDisplayName,
+            DocumentsContract.Document.ColumnMimeType,
+            DocumentsContract.Document.ColumnLastModified
+        };
+
+        using var cursor = context.ContentResolver?.Query(childrenUri, projection, null, null, null);
+        while (cursor != null && cursor.MoveToNext())
+        {
+            var name = cursor.GetString(0);
+            if (name != null && cursor.GetString(1)?.StartsWith("image/", StringComparison.Ordinal) == true)
+                result.Add(($"{trimmed}/{name}", cursor.GetLong(2)));
+        }
+
+        return result;
+    }
+
     public static void CreateDirectory(Context context, string path)
     {
         var uri = DocumentUri(context, path) ?? throw NoAccess();
